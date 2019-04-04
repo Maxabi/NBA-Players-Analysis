@@ -1,0 +1,220 @@
+---
+author: "Maxabi"
+date: ""
+output:
+  pdf_document:
+    fig_height: 5
+    fig_width: 5
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+[source des données](https://www.kaggle.com/jacobbaruch/nba-player-of-the-week/version/1#NBA_player_of_the_week.csv)
+
+
+#1 Observations globales
+
+Etant tous 2 passionnés par le sport, nous avons selectionné un jeu de données comportant les récompenses des joueurs du NBA de 1984-1985 à 2017-2018. Les données sont déjà mises en forme dans un tibble.
+
+Pour commencer, installons les packages nécessaires afin d'utiliser des fonctions spécifiques.
+```{r message=FALSE, warning=FALSE}
+library(tidyverse) 
+library(dplyr)
+library(ggplot2)
+sports <- read_csv("NBA_player_of_the_week.csv") # La fonction read_csv lit le document
+attach(sports)
+```
+
+Voici un aperçu global de notre jeu de données :
+```{r}
+dim(sports)
+```
+Ce jeu de données comporte 13 variables et 1145 lignes (récompenses).
+
+```{r}
+str(sports)
+```
+- `Age` : âge du joueur au moment de la récompense
+- `Conference` : localisation du match qui a permis la récompense
+- `Date` : date d'attribution de la récompense
+- `Draft Year` : année de recrutement du joueur dans son club
+- `Height` : poids du joueur
+- `Player` : nom et prénom du joueur
+- `Position` : position initiale du joueur sur le terrain
+- `Season` : date de la saison pleine
+- `Season short` : date de fin de saison
+- `Season in league` : saisons en ligue
+- `Team` : nom de l'équipe du joueur
+- `Weight` : taille du joueur
+- `Real_value` : Si deux récompenses sont données la mÃªme semaine[Est & Ouest], le joueur obtient 0.5, sinon 1 point
+
+Pourquoi trouve t-ton des valeurs manquantes?
+
+```{r}
+valeurs_na <- sports %>% filter(is.na(Conference))
+max(valeurs_na$Date)
+```
+
+Avant le 9 Novembre 1997, la conférence du lieu de la remise des récompenses n'était pas encore établie (Est/Ouest).
+
+A présent, étant donné que les données proviennent des Etats-Unis, convertissons les dates en format "aaaa-mm-jj", la taille en m et le poids en kg.
+
+```{r, warning = FALSE}
+convert_taille <- function(str) {
+  fi <- strsplit(str, "-")
+  sapply(fi, function(xx) {  
+    sum(as.integer(xx) * c(0.3, 0.03))
+  })
+}
+
+sports <- sports %>% mutate(`Height in Meters` = map_dbl(Height, ~ convert_taille(.))) # On ajoute une colonne des tailles en m à notre tibble
+
+```
+
+```{r}
+sports <- sports %>% mutate(`Weight in kgs` = Weight * 0.45359237) # On ajoute une colonne des poids en kg à notre tibble
+```
+
+```{r, warning = FALSE}
+library(lubridate)
+sports <- sports %>% mutate(date = mdy(Date)) # On ajoute une colonne des dates à notre tibble
+```
+
+
+#2 Data visualisation
+
+On s'intéresse à la taille et au poids des joueurs en fonction de leur position sur le terrain.
+
+```{r, warning = FALSE}
+ggplot(sports) +
+  geom_point(mapping = aes(x = `Weight in kgs`, y = `Height in Meters`, color = Position)) +
+  labs(title = " Graphique 1 : Poids en fonction de la taille de chaque joueur et de sa position sur le terrain")
+```
+
+On remarque que plus le joueur est grand, plus il se trouve près du panier adverse.
+
+
+Affichons l'âge des joueurs et leur équipe au moment de la récompense.
+```{r}
+ggplot(sports) +
+  geom_bar(mapping = aes(x = Age, fill = Team)) +
+  labs(title = "Graphique 2 : L'âge des joueurs et leur équipe au moment de la récompense") +
+  theme(legend.position = "bottom")
+
+```
+
+Sur ce graphique, nous pouvons observé que l'âge moyen des joueurs au moment de la récompense se trouve autour de 25 ans. 
+
+
+Y a t-il un lien tre l'âge du joueur au moment de sa récompense et son nombre de saisons en ligue?
+```{r}
+ggplot(sports) + 
+  geom_smooth(mapping = aes(x = Age, y = `Seasons in league`, color = "red")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Graphique 3 : Age des joueurs en fonction du nombre de saisons en ligue")
+```
+
+Effectivement, plus un joueur a reçu sa récompense tÃ´t, moins il a fait de saisons en ligue.
+
+Relevons à présent les récompenses reçues par Michael Jordan.
+
+```{r}
+recomp_MJ <- sports %>% filter(Player == 'Michael Jordan')
+```
+
+Affichons le nombre de récompenses par saison de Michael Jordan
+```{r}
+ggplot(recomp_MJ) +
+  geom_bar(mapping = aes(x = Season), fill = "blue") +
+  labs(title = " Graphique 4 : Nombre de récompenses par saison de Michael Jordan")
+```
+
+Michael Jordan a reçu le plus de récompenses (4) pendant la saison 1988-1989.
+
+Un autre façon de représenter le graphique précédent serait : 
+
+```{r}
+bar <- ggplot(recomp_MJ) + 
+  geom_bar(
+    mapping = aes(x = Season), 
+    show.legend = FALSE,
+    width = 1
+  ) + 
+  theme(aspect.ratio = 1) +
+  labs(x = NULL, y = NULL)
+
+bar + coord_polar()
+```
+
+
+#3 Data Transformation
+
+
+Interessons nous maintenant aux caractéritiques des données.
+
+Combien de joueurs ont reçu de récompenses?
+
+```{r}
+length(unique(Player))
+```
+
+Il y a `r length(unique(Player))` joueurs différents qui ont reçu une récompense.
+
+Quelle équipe a reçu le plus de récompenses?
+
+```{r}
+as.data.frame(table(Team)) %>% filter (Freq == max(Freq))
+```
+
+L'équipe qui a remporté le plus de récompenses est "Los angeles Lakers", avec 71 récompenses à ce jour. Cela représente `r (71*100)/1145`% des récompenses totales.
+
+
+Combien de joueurs récompensés ont été recruté entre 1997 et 2000, avant 2000 et entre 2000 et 2005?
+
+```{r}
+count(sports %>% filter(`Draft Year` %in% c(1997, 2000)))
+count(sports %>% filter(`Draft Year` < 2000))
+count(sports %>% filter(`Draft Year` > 2000 & `Draft Year` < 2005 ))
+```
+52 joueurs récompensés ont été recrutés entre 1997 et 2000, 642 avant 2000 et 222 entre 2000 et 2005.
+
+Quel joueur a reçu une récompense le plus jeune?
+
+```{r}
+younger_award <- sports %>% arrange(Age) %>% select('Draft Year', Player, Age, Team, Position, date) 
+slice(younger_award, 1)
+```
+
+Il s'agit de Carmelo Anthony, âgé de 19 ans, qui a reçu sa récompense le 12 Avril 2004.
+
+
+Quel joueur est le plus grand?  
+```{r} 
+slice(sports %>% arrange(desc(Height)) %>% select(Player, 'Height in Meters') , 1)
+```
+
+Il s'agit de Yao Ming, du haut de ses 2 mètres 28.
+
+Quelle est la moyenne d'âge et de poids des joueurs?
+```{r}
+sports %>% summarize(mean_age = mean(Age),
+                     mean_weight = mean(`Weight in kgs`, na.rm = TRUE))
+```
+
+La moyenne d'âge est de 26.8 ans et de 102.6 kg grossomodo. Cela nous confirme nos observations sur le graphique 2. 
+
+Quel joueur a reçu le plus de récompense?
+```{r}
+as.data.frame(table(Player)) %>% filter (Freq == max(Freq))
+
+```
+
+LeBron James a reçu le plus de récompenses (61) à ce jour.
+
+#4 Conclusion
+
+Ce projet nous a permis d'utiliser nos connaissance en la matière, afin d'analyser un cas concret. Cela nous a conduit à mettre en lien certaines variables et à utiliser des statistiques descriptives. 
+
+Ce cours nous a permis d'en apprendre davantage sur l'étendue du tidyverse et de l'analyse de données en général.
+
